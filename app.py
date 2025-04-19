@@ -1,106 +1,107 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from werkzeug.utils import secure_filename
 import os
 
 app = Flask(__name__)
 CORS(app)
 
-app.config['UPLOAD_FOLDER'] = 'uploads'
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-def estimate_budget(square_feet, room_type):
-    paint_price_per_gallon = 40
-    flooring_price_per_box = 60
+# Pricing per item based on Montreal averages
+PRICES = {
+    "paint_gallon": 45,
+    "flooring_box": 90
+}
 
-    paint_gallons = round(float(square_feet) / 350, 1)
-    flooring_boxes = round(float(square_feet) / 20, 1)
-
-    if room_type == 'kitchen':
-        extra = 500  # cabinets, tile
-    elif room_type == 'bathroom':
-        extra = 700  # vanity, tiles, toilet
-    elif room_type == 'bedroom':
-        extra = 300
-    elif room_type == 'living_room':
-        extra = 400
-    elif room_type == 'basement':
-        extra = 1500
-    elif room_type == 'hallway':
-        extra = 150
-    elif room_type == 'dining_room':
-        extra = 400
-    elif room_type == 'garage':
-        extra = 1000
-    elif room_type == 'garden':
-        extra = 1200
-    elif room_type == 'exterior':
-        extra = 1800
-    else:
-        extra = 500
-
-    total = round(paint_gallons * paint_price_per_gallon + flooring_boxes * flooring_price_per_box + extra)
-    return paint_gallons, flooring_boxes, total
-
-def generate_suggestion(room_type):
-    suggestions = {
-        'kitchen': 'Modern kitchen with white cabinets, subway tile backsplash, and quartz countertops.',
-        'bathroom': 'Spa-inspired bathroom with large tiles, soft lighting, and floating vanity.',
-        'bedroom': 'Cozy bedroom with soft neutrals, accent wall, and warm wood flooring.',
-        'living_room': 'Scandinavian cozy: white oak flooring, neutral tones, matte black accents.',
-        'basement': 'Functional basement with laminate flooring, pot lights, and neutral paint.',
-        'hallway': 'Bright hallway with light paint and decorative wall panels.',
-        'dining_room': 'Elegant dining room with pendant lighting and textured wallpaper.',
-        'garage': 'Clean garage with epoxy floor and wall-mounted shelving.',
-        'garden': 'Backyard with composite decking, stone path, and greenery.',
-        'exterior': 'Modern curb appeal with updated siding, black trim, and new lighting.'
+# Room types with suggestions and basic cost multipliers
+ROOM_DATABASE = {
+    "kitchen": {
+        "suggestion": "Modern minimalist with white cabinets and subway tile backsplash.",
+        "paint_factor": 0.003,
+        "flooring_factor": 0.045
+    },
+    "bathroom": {
+        "suggestion": "Spa-inspired with light tiles, floating vanity, and LED mirrors.",
+        "paint_factor": 0.002,
+        "flooring_factor": 0.03
+    },
+    "bedroom": {
+        "suggestion": "Warm tones with laminate flooring and built-in closet upgrades.",
+        "paint_factor": 0.0028,
+        "flooring_factor": 0.04
+    },
+    "living_room": {
+        "suggestion": "Scandinavian cozy: white oak flooring, neutral tones, matte black accents.",
+        "paint_factor": 0.0028,
+        "flooring_factor": 0.05
+    },
+    "basement": {
+        "suggestion": "Industrial-modern with polished concrete floors and soft LED lighting.",
+        "paint_factor": 0.003,
+        "flooring_factor": 0.035
+    },
+    "hallway": {
+        "suggestion": "Functional with high-durability paint and ceramic tile.",
+        "paint_factor": 0.0018,
+        "flooring_factor": 0.02
+    },
+    "dining_room": {
+        "suggestion": "Elegant setup with engineered hardwood and pendant lighting.",
+        "paint_factor": 0.0025,
+        "flooring_factor": 0.04
+    },
+    "garage": {
+        "suggestion": "Epoxy-coated floor with wall storage systems.",
+        "paint_factor": 0.0015,
+        "flooring_factor": 0.01
+    },
+    "backyard": {
+        "suggestion": "Add a deck, planter boxes, and soft LED string lighting.",
+        "paint_factor": 0,
+        "flooring_factor": 0.008
+    },
+    "exterior": {
+        "suggestion": "Modern curb appeal with black trim, cedar siding, and paver walkway.",
+        "paint_factor": 0.0025,
+        "flooring_factor": 0.01
     }
-    return suggestions.get(room_type, 'Simple modern design with light colors and durable materials.')
+}
 
 @app.route('/upload', methods=['POST'])
 def upload():
     if 'file' not in request.files or 'room_type' not in request.form:
-        return jsonify({'error': 'Missing file or room type'}), 400
+        return jsonify({'error': 'Missing file or room type.'}), 400
 
     file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
+    square_feet = float(request.form.get('square_feet', 0))
+    room_type = request.form['room_type']
 
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if room_type not in ROOM_DATABASE:
+        return jsonify({'error': f'Room type "{room_type}" not recognized. Try kitchen, bathroom, living room, or bedroom.'}), 400
+
+    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(filepath)
 
-    square_feet = request.form.get('square_feet')
-    room_type = request.form.get('room_type')
+    suggestion = ROOM_DATABASE[room_type]['suggestion']
+    paint_factor = ROOM_DATABASE[room_type]['paint_factor']
+    flooring_factor = ROOM_DATABASE[room_type]['flooring_factor']
 
-    if not square_feet or not room_type:
-        return jsonify({'error': 'Missing square footage or room type'}), 400
-
-    room_type = room_type.lower().replace(" ", "_")
-
-    allowed_rooms = [
-        'kitchen', 'bathroom', 'bedroom', 'living_room',
-        'basement', 'hallway', 'dining_room', 'garage',
-        'garden', 'exterior'
-    ]
-
-    if room_type not in allowed_rooms:
-        return jsonify({'error': f'Room type "{room_type}" not recognized. Try {", ".join(allowed_rooms)}.'}), 400
-
-    paint_gallons, flooring_boxes, estimated_budget = estimate_budget(square_feet, room_type)
+    paint_gallons = round(square_feet * paint_factor, 1)
+    flooring_boxes = round(square_feet * flooring_factor, 1)
+    budget = round((paint_gallons * PRICES["paint_gallon"]) + (flooring_boxes * PRICES["flooring_box"]))
 
     return jsonify({
-        'message': 'Image received',
-        'filename': filename,
-        'square_feet': square_feet,
-        'room_type': room_type,
-        'suggestion': generate_suggestion(room_type),
-        'materials_needed': {
-            'paint_gallons': paint_gallons,
-            'flooring_boxes': flooring_boxes
+        "filename": file.filename,
+        "square_feet": square_feet,
+        "room_type": room_type,
+        "suggestion": suggestion,
+        "materials_needed": {
+            "paint_gallons": paint_gallons,
+            "flooring_boxes": flooring_boxes
         },
-        'estimated_budget': estimated_budget
+        "estimated_budget": budget
     })
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    app.run(debug=True)
