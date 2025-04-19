@@ -1,117 +1,112 @@
-from flask import Flask, request, jsonify, send_from_directory
+import os
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-from werkzeug.utils import secure_filename
-import os, json, uuid
 from PIL import Image
-import torch
-import torchvision.transforms as transforms
-from torchvision import models
 
 app = Flask(__name__)
 CORS(app)
 
-UPLOAD_FOLDER = 'uploads'
-RESULTS_FOLDER = 'results'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(RESULTS_FOLDER, exist_ok=True)
+def generate_suggestions(room_type, square_feet):
+    # Realistic suggestions and cost estimates based on room type
+    suggestions = {
+        "kitchen": {
+            "style": "Modern white with subway tiles and open shelves.",
+            "paint_gallons": round(square_feet / 350, 1),
+            "flooring_boxes": round(square_feet / 20, 1),
+            "base_cost": 1400
+        },
+        "bathroom": {
+            "style": "Minimalist: ceramic tiles, light gray walls, matte fixtures.",
+            "paint_gallons": round(square_feet / 400, 1),
+            "flooring_boxes": round(square_feet / 25, 1),
+            "base_cost": 1000
+        },
+        "living_room": {
+            "style": "Scandinavian cozy: white oak flooring, neutral tones, matte black accents.",
+            "paint_gallons": round(square_feet / 360, 1),
+            "flooring_boxes": round(square_feet / 20, 1),
+            "base_cost": 1100
+        },
+        "bedroom": {
+            "style": "Calm tones: greige walls, vinyl plank floors, minimal decor.",
+            "paint_gallons": round(square_feet / 370, 1),
+            "flooring_boxes": round(square_feet / 22, 1),
+            "base_cost": 950
+        },
+        "basement": {
+            "style": "Durable rustic: waterproof vinyl, white walls, recessed lighting.",
+            "paint_gallons": round(square_feet / 360, 1),
+            "flooring_boxes": round(square_feet / 18, 1),
+            "base_cost": 1200
+        },
+        "dining_room": {
+            "style": "Elegant: crown molding, herringbone floors, warm neutrals.",
+            "paint_gallons": round(square_feet / 340, 1),
+            "flooring_boxes": round(square_feet / 20, 1),
+            "base_cost": 1300
+        },
+        "hallway": {
+            "style": "Clean modern: white walls, darker wood floors, accent lighting.",
+            "paint_gallons": round(square_feet / 400, 1),
+            "flooring_boxes": round(square_feet / 22, 1),
+            "base_cost": 600
+        },
+        "garage": {
+            "style": "Utility-focused: epoxy floors, durable white paint.",
+            "paint_gallons": round(square_feet / 300, 1),
+            "flooring_boxes": 0,
+            "base_cost": 700
+        },
+        "garden": {
+            "style": "Functional greenery: paving stones, raised planters.",
+            "paint_gallons": 0,
+            "flooring_boxes": round(square_feet / 30, 1),
+            "base_cost": 850
+        },
+        "facade": {
+            "style": "Curb appeal: fresh siding/paint, black trim, clean lines.",
+            "paint_gallons": round(square_feet / 250, 1),
+            "flooring_boxes": 0,
+            "base_cost": 2000
+        }
+    }
 
-# Load pretrained model
-model = models.resnet18(pretrained=True)
-model.eval()
+    if room_type not in suggestions:
+        return None
 
-# Mapping from image label to room type
-imagenet_to_room = {
-    'refrigerator': 'kitchen',
-    'oven': 'kitchen',
-    'bathtub': 'bathroom',
-    'shower_curtain': 'bathroom',
-    'sofa': 'living_room',
-    'television': 'living_room',
-    'bed': 'bedroom',
-    'garage_door': 'garage',
-    'patio': 'backyard',
-    'mailbox': 'exterior'
-}
+    s = suggestions[room_type]
+    budget = s["base_cost"] + (s["paint_gallons"] * 60) + (s["flooring_boxes"] * 55)
 
-# Room details
-room_data = {
-    "kitchen": {"suggestion": "Modern kitchen with white cabinets.", "paint": 0.003, "flooring": 0.04, "fixtures": 400},
-    "bathroom": {"suggestion": "Spa-style bathroom with LED mirror.", "paint": 0.002, "flooring": 0.035, "fixtures": 500},
-    "living_room": {"suggestion": "Cozy living room with oak floors.", "paint": 0.0028, "flooring": 0.05, "fixtures": 200},
-    "bedroom": {"suggestion": "Warm bedroom with engineered wood.", "paint": 0.0025, "flooring": 0.04, "fixtures": 150},
-    "basement": {"suggestion": "Finished basement with vinyl flooring.", "paint": 0.003, "flooring": 0.045, "fixtures": 300},
-    "hallway": {"suggestion": "Simple hallway with tile.", "paint": 0.0018, "flooring": 0.02, "fixtures": 100},
-    "dining_room": {"suggestion": "Elegant dining room.", "paint": 0.0025, "flooring": 0.04, "fixtures": 200},
-    "garage": {"suggestion": "Garage with epoxy floor.", "paint": 0.0015, "flooring": 0.01, "fixtures": 300},
-    "backyard": {"suggestion": "Deck with lighting and planters.", "paint": 0.0, "flooring": 0.01, "fixtures": 500},
-    "exterior": {"suggestion": "Modern white/black exterior.", "paint": 0.002, "flooring": 0.01, "fixtures": 350}
-}
-
-def classify_room(path):
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor()
-    ])
-    img = Image.open(path).convert('RGB')
-    tensor = transform(img).unsqueeze(0)
-    with torch.no_grad():
-        output = model(tensor)
-    idx = torch.argmax(output).item()
-    label_file = "imagenet_classes.txt"
-    if not os.path.exists(label_file):
-        import urllib.request
-        urllib.request.urlretrieve(
-            "https://raw.githubusercontent.com/pytorch/hub/master/imagenet_classes.txt",
-            label_file)
-    with open(label_file) as f:
-        labels = [line.strip() for line in f.readlines()]
-    label = labels[idx]
-    return imagenet_to_room.get(label, "unknown")
+    return {
+        "suggestion": s["style"],
+        "materials_needed": {
+            "paint_gallons": s["paint_gallons"],
+            "flooring_boxes": s["flooring_boxes"]
+        },
+        "estimated_budget": f"${round(budget)}"
+    }
 
 @app.route('/upload', methods=['POST'])
 def upload():
-    if 'file' not in request.files or 'square_feet' not in request.form:
-        return jsonify({'error': 'Missing data'}), 400
+    if 'file' not in request.files or 'room_type' not in request.form:
+        return jsonify({'error': 'Missing file or room type'}), 400
 
     file = request.files['file']
-    sqft = float(request.form['square_feet'])
-    room_type = request.form.get('room_type', 'auto')
-    filename = secure_filename(file.filename)
-    path = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(path)
+    room_type = request.form['room_type'].lower().replace(" ", "_")
+    square_feet = int(request.form.get('square_feet', 0))
 
-    if room_type == 'auto':
-        room_type = classify_room(path)
+    suggestion = generate_suggestions(room_type, square_feet)
+    if not suggestion:
+        return jsonify({'error': f'Room type \"{room_type}\" not recognized.'}), 400
 
-    if room_type not in room_data:
-        return jsonify({'error': f'Unrecognized room type: {room_type}'}), 400
+    return jsonify({
+        'filename': file.filename,
+        'room_type': room_type,
+        'square_feet': square_feet,
+        **suggestion
+    })
 
-    room = room_data[room_type]
-    paint = round(sqft * room['paint'], 1)
-    floor = round(sqft * room['flooring'], 1)
-    budget = round(paint * 45 + floor * 80 + room['fixtures'])
-
-    result_id = str(uuid.uuid4())
-    result = {
-        "filename": filename,
-        "room_type": room_type,
-        "square_feet": sqft,
-        "suggestion": room['suggestion'],
-        "materials_needed": {"paint_gallons": paint, "flooring_boxes": floor},
-        "estimated_budget": budget
-    }
-    with open(os.path.join(RESULTS_FOLDER, f"{result_id}.json"), 'w') as f:
-        json.dump(result, f)
-
-    return jsonify({"result_id": result_id, **result})
-
-@app.route('/result/<rid>', methods=['GET'])
-def view_result(rid):
-    result_path = os.path.join(RESULTS_FOLDER, f"{rid}.json")
-    if not os.path.exists(result_path):
-        return jsonify({'error': 'Result not found'}), 404
-    with open(result_path) as f:
-        return jsonify(json.load(f))
-
+# Run with proper host and port binding for Render
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
