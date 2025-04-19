@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
+from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
@@ -23,64 +23,59 @@ def upload_file():
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
 
+    square_feet = request.form.get('square_feet')
+    room_type = request.form.get('room_type')
+
+    if not square_feet or not room_type:
+        return jsonify({'error': 'Missing square footage or room type'}), 400
+
     try:
-        square_feet = float(request.form.get('square_feet', 0))
+        sqft = float(square_feet)
     except ValueError:
         return jsonify({'error': 'Invalid square footage'}), 400
 
-    room_type = request.form.get('room_type', '').lower()
-
-    if not square_feet or square_feet <= 0:
-        return jsonify({'error': 'Missing or invalid square footage'}), 400
-
+    # Suggestions and materials by room
     suggestions = {
         'kitchen': {
-            'suggestion': 'Modern Montreal kitchen: white cabinets, subway tiles, and butcher block counters.',
-            'materials': {
-                'paint_gallons': round(square_feet / 400, 1),
-                'tiles_sqft': round(square_feet * 0.3, 1),
-            },
-            'estimated_cost': round(square_feet * 40, 2)
+            'suggestion': 'Modern clean kitchen with white cabinets, quartz countertops, and soft-close drawers.',
+            'paint': 0.5,
+            'floor': 0.7,
+            'cost_per_sqft': 80
         },
         'bathroom': {
-            'suggestion': 'Bright and clean look: ceramic tiles, waterproof paint, modern vanity.',
-            'materials': {
-                'paint_gallons': round(square_feet / 300, 1),
-                'tiles_sqft': round(square_feet * 0.8, 1),
-            },
-            'estimated_cost': round(square_feet * 55, 2)
+            'suggestion': 'Elegant bathroom with matte tiles, light grey paint, and a black faucet accent.',
+            'paint': 0.3,
+            'floor': 0.6,
+            'cost_per_sqft': 120
         },
-        'living room': {
+        'living_room': {
             'suggestion': 'Scandinavian cozy: white oak flooring, neutral tones, matte black accents.',
-            'materials': {
-                'paint_gallons': round(square_feet / 350, 1),
-                'flooring_boxes': round(square_feet / 20, 1),
-            },
-            'estimated_cost': round(square_feet * 35, 2)
+            'paint': 0.7,
+            'floor': 0.5,
+            'cost_per_sqft': 60
         },
         'bedroom': {
-            'suggestion': 'Warm Montreal bedroom: off-white walls, light wood floor, blackout curtains.',
-            'materials': {
-                'paint_gallons': round(square_feet / 350, 1),
-                'flooring_boxes': round(square_feet / 22, 1),
-            },
-            'estimated_cost': round(square_feet * 30, 2)
+            'suggestion': 'Warm and relaxing bedroom with soft lighting, oak floors, and calm paint tones.',
+            'paint': 0.6,
+            'floor': 0.4,
+            'cost_per_sqft': 50
         }
     }
 
-    if room_type not in suggestions:
+    room_data = suggestions.get(room_type.lower())
+    if not room_data:
         return jsonify({'error': f'Room type "{room_type}" not recognized. Try kitchen, bathroom, living room, or bedroom.'}), 400
 
-    result = suggestions[room_type]
-
     return jsonify({
-        'message': 'Image received',
         'filename': filename,
-        'square_feet': square_feet,
         'room_type': room_type,
-        'suggestion': result['suggestion'],
-        'materials_needed': result['materials'],
-        'estimated_cost': f"${result['estimated_cost']}"
+        'square_feet': sqft,
+        'suggestion': room_data['suggestion'],
+        'materials_needed': {
+            'paint_gallons': round(sqft * room_data['paint'], 1),
+            'flooring_boxes': round(sqft * room_data['floor'], 1)
+        },
+        'estimated_budget': round(sqft * room_data['cost_per_sqft'])
     })
 
 if __name__ == '__main__':
