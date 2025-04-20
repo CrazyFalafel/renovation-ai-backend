@@ -1,112 +1,101 @@
-import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from PIL import Image
+import os
 
 app = Flask(__name__)
 CORS(app)
 
-def generate_suggestions(room_type, square_feet):
-    # Realistic suggestions and cost estimates based on room type
-    suggestions = {
-        "kitchen": {
-            "style": "Modern white with subway tiles and open shelves.",
-            "paint_gallons": round(square_feet / 350, 1),
-            "flooring_boxes": round(square_feet / 20, 1),
-            "base_cost": 1400
-        },
-        "bathroom": {
-            "style": "Minimalist: ceramic tiles, light gray walls, matte fixtures.",
-            "paint_gallons": round(square_feet / 400, 1),
-            "flooring_boxes": round(square_feet / 25, 1),
-            "base_cost": 1000
-        },
-        "living_room": {
-            "style": "Scandinavian cozy: white oak flooring, neutral tones, matte black accents.",
-            "paint_gallons": round(square_feet / 360, 1),
-            "flooring_boxes": round(square_feet / 20, 1),
-            "base_cost": 1100
-        },
-        "bedroom": {
-            "style": "Calm tones: greige walls, vinyl plank floors, minimal decor.",
-            "paint_gallons": round(square_feet / 370, 1),
-            "flooring_boxes": round(square_feet / 22, 1),
-            "base_cost": 950
-        },
-        "basement": {
-            "style": "Durable rustic: waterproof vinyl, white walls, recessed lighting.",
-            "paint_gallons": round(square_feet / 360, 1),
-            "flooring_boxes": round(square_feet / 18, 1),
-            "base_cost": 1200
-        },
-        "dining_room": {
-            "style": "Elegant: crown molding, herringbone floors, warm neutrals.",
-            "paint_gallons": round(square_feet / 340, 1),
-            "flooring_boxes": round(square_feet / 20, 1),
-            "base_cost": 1300
-        },
-        "hallway": {
-            "style": "Clean modern: white walls, darker wood floors, accent lighting.",
-            "paint_gallons": round(square_feet / 400, 1),
-            "flooring_boxes": round(square_feet / 22, 1),
-            "base_cost": 600
-        },
-        "garage": {
-            "style": "Utility-focused: epoxy floors, durable white paint.",
-            "paint_gallons": round(square_feet / 300, 1),
-            "flooring_boxes": 0,
-            "base_cost": 700
-        },
-        "garden": {
-            "style": "Functional greenery: paving stones, raised planters.",
-            "paint_gallons": 0,
-            "flooring_boxes": round(square_feet / 30, 1),
-            "base_cost": 850
-        },
-        "facade": {
-            "style": "Curb appeal: fresh siding/paint, black trim, clean lines.",
-            "paint_gallons": round(square_feet / 250, 1),
-            "flooring_boxes": 0,
-            "base_cost": 2000
-        }
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Dummy room classification function
+def classify_room_type(image_path):
+    # Placeholder logic: randomly assign a room type or analyze filename
+    filename = os.path.basename(image_path).lower()
+    if "bath" in filename:
+        return "bathroom"
+    elif "kitchen" in filename:
+        return "kitchen"
+    elif "bed" in filename:
+        return "bedroom"
+    elif "garage" in filename:
+        return "garage"
+    elif "yard" in filename or "garden" in filename:
+        return "backyard"
+    elif "face" in filename or "exterior" in filename:
+        return "exterior"
+    elif "hall" in filename:
+        return "hallway"
+    elif "dining" in filename:
+        return "dining_room"
+    elif "base" in filename:
+        return "basement"
+    else:
+        return "living_room"
+
+# Suggestions and pricing data
+room_data = {
+    "living_room": {
+        "suggestion": "Scandinavian cozy: white oak flooring, neutral tones, matte black accents.",
+        "paint_per_sqft": 0.0028,
+        "flooring_per_sqft": 0.05,
+        "budget_per_sqft": 4.5
+    },
+    "kitchen": {
+        "suggestion": "Modern kitchen: white cabinets, subway tiles, matte black faucet.",
+        "paint_per_sqft": 0.0025,
+        "flooring_per_sqft": 0.04,
+        "budget_per_sqft": 6.0
+    },
+    "bathroom": {
+        "suggestion": "Spa bathroom: ceramic tiles, floating vanity, LED mirrors.",
+        "paint_per_sqft": 0.0020,
+        "flooring_per_sqft": 0.03,
+        "budget_per_sqft": 7.5
+    },
+    "bedroom": {
+        "suggestion": "Warm and modern: neutral wall paint, engineered wood floor, soft lighting.",
+        "paint_per_sqft": 0.0026,
+        "flooring_per_sqft": 0.045,
+        "budget_per_sqft": 4.0
+    },
+    "basement": {
+        "suggestion": "Finished basement: luxury vinyl flooring, bright walls, pot lights.",
+        "paint_per_sqft": 0.0028,
+        "flooring_per_sqft": 0.05,
+        "budget_per_sqft": 3.5
+    },
+    "hallway": {
+        "suggestion": "Bright hallway: white walls, baseboard trim, accent light fixtures.",
+        "paint_per_sqft": 0.0022,
+        "flooring_per_sqft": 0.04,
+        "budget_per_sqft": 3.0
+    },
+    "dining_room": {
+        "suggestion": "Contemporary dining: wood floors, warm white paint, chandelier.",
+        "paint_per_sqft": 0.0025,
+        "flooring_per_sqft": 0.05,
+        "budget_per_sqft": 5.0
+    },
+    "garage": {
+        "suggestion": "Utility garage: epoxy floor, wall racks, LED panels.",
+        "paint_per_sqft": 0.001,
+        "flooring_per_sqft": 0.02,
+        "budget_per_sqft": 2.5
+    },
+    "backyard": {
+        "suggestion": "Landscaped backyard: pavers, grass patch, lighting.",
+        "paint_per_sqft": 0,
+        "flooring_per_sqft": 0.02,
+        "budget_per_sqft": 8.0
+    },
+    "exterior": {
+        "suggestion": "Modern curb appeal: dark siding, light trim, smart lighting.",
+        "paint_per_sqft": 0.003,
+        "flooring_per_sqft": 0,
+        "budget_per_sqft": 9.0
     }
+}
 
-    if room_type not in suggestions:
-        return None
-
-    s = suggestions[room_type]
-    budget = s["base_cost"] + (s["paint_gallons"] * 60) + (s["flooring_boxes"] * 55)
-
-    return {
-        "suggestion": s["style"],
-        "materials_needed": {
-            "paint_gallons": s["paint_gallons"],
-            "flooring_boxes": s["flooring_boxes"]
-        },
-        "estimated_budget": f"${round(budget)}"
-    }
-
-@app.route('/upload', methods=['POST'])
-def upload():
-    if 'file' not in request.files or 'room_type' not in request.form:
-        return jsonify({'error': 'Missing file or room type'}), 400
-
-    file = request.files['file']
-    room_type = request.form['room_type'].lower().replace(" ", "_")
-    square_feet = int(request.form.get('square_feet', 0))
-
-    suggestion = generate_suggestions(room_type, square_feet)
-    if not suggestion:
-        return jsonify({'error': f'Room type \"{room_type}\" not recognized.'}), 400
-
-    return jsonify({
-        'filename': file.filename,
-        'room_type': room_type,
-        'square_feet': square_feet,
-        **suggestion
-    })
-
-# Run with proper host and port binding for Render
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+@app.route('/upload
